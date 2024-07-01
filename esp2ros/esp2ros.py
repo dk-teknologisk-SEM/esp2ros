@@ -3,6 +3,7 @@ import socket
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
+from std_srvs.srv import Trigger
 
 
 class ESP32Listener(Node):
@@ -11,7 +12,7 @@ class ESP32Listener(Node):
         super().__init__('esp32_listener')
         self.publisher_ = self.create_publisher(String, 'esp32/input', 10)
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.server_socket.bind(('192.168.1.100', 1883))  # IP of ROS2 PC
+        self.server_socket.bind(('172.17.0.2', 1883))  # IP of ROS2 PC
         self.server_socket.listen(5)
         self.get_logger().info("Socket server listening on port 1883")
 
