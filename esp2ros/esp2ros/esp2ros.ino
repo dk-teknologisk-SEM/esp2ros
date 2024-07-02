@@ -1,10 +1,11 @@
 
 #include <SPI.h>
 #include <Ethernet.h>
+#include "Arduino.h"
 
 // Network settings
 byte mac[] = {0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED};
-IPAddress server(192, 168, 1, 123);                                            // IP address of the PC running the ROS2 node
+IPAddress server(192, 168, 1, 12);                                             // IP address of the PC running the ROS2 node
 const int pinCount = 5;                                                        // Number of pins to monitor
 const int pins[pinCount] = {PIN_I0_0, PIN_I0_1, PIN_I0_2, PIN_I0_3, PIN_I0_4}; // Array of input pins
 
@@ -19,11 +20,66 @@ EthernetClient client;
 
 const bool USE_DHCP = false;
 
+enum state
+{
+    BOOTING,
+    CONNECTING,
+    CONNECTED,
+    DISCONNECTED
+};
+
+state current_state = BOOTING;
+
 void setup()
 {
     // Start serial communication
     Serial.begin(115200);
 
+    prepare_ethernet_hw();
+
+    connect_to_server();
+
+    // Set the input pin modes and initialize previous states
+    Serial.println("Reading initial pin states");
+    for (int i = 0; i < pinCount; i++)
+    {
+        pinMode(pins[i], INPUT);
+        previousStates[i] = digitalRead(pins[i]);
+    }
+
+    Serial.println("Starting main loop");
+}
+
+void connect_to_server()
+{
+
+    current_state = CONNECTING;
+
+    // Attempt to connect to the server
+    bool connected = false;
+    int attempt_count = 1;
+    while (!connected)
+    {
+        Serial.print("Attempt ");
+        Serial.print(attempt_count++);
+        Serial.print(" : ");
+        if (client.connect(server, 1883))
+        {
+            Serial.println("Connected to server");
+            connected = true;
+        }
+        else
+        {
+            Serial.println("Connection failed");
+            delay(500);
+        }
+    }
+
+    current_state = CONNECTED;
+}
+
+void prepare_ethernet_hw()
+{
     // start the Ethernet connection:
     if (USE_DHCP)
     {
@@ -75,45 +131,26 @@ void setup()
     {
         Serial.println("Ethernet cable is connected.");
     }
-
-    // Attempt to connect to the server
-    bool connected = false;
-    for (int i = 0; i < 5; i++)
-    {
-        if (client.connect(server, 1883))
-        {
-            Serial.println("Connected to server");
-            connected = true;
-            break;
-        }
-        else
-        {
-            Serial.println("Connection failed");
-            delay(500);
-        }
-    }
-
-    if (!connected)
-    {
-        Serial.println("Connection could not be established, check your hardware and try again");
-        while (true)
-        {
-            delay(1); // do nothing, no point running without Ethernet hardware
-        }
-    }
-
-    // Set the input pin modes and initialize previous states
-    Serial.println("Reading initial pin states");
-    for (int i = 0; i < pinCount; i++)
-    {
-        pinMode(pins[i], INPUT);
-        previousStates[i] = digitalRead(pins[i]);
-    }
-
-    Serial.println("Starting main loop");
 }
 
 void loop()
+{
+    switch (current_state)
+    {
+    case CONNECTED:
+        check_and_send_pin_states();
+        break;
+    case DISCONNECTED:
+        connect_to_server();
+        break;
+    default:
+        break;
+    }
+
+    delay(100); // Adjust as needed
+}
+
+void check_and_send_pin_states()
 {
     for (int i = 0; i < pinCount; i++)
     {
@@ -125,8 +162,6 @@ void loop()
             previousStates[i] = currentState;
         }
     }
-
-    delay(100); // Adjust as needed
 }
 
 void sendMessage(int pin, int state)
@@ -141,5 +176,6 @@ void sendMessage(int pin, int state)
     else
     {
         Serial.println("Disconnected from server");
+        current_state = DISCONNECTED;
     }
 }
