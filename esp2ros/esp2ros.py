@@ -68,6 +68,7 @@ def main(args=None):
     try:
         esp32_listener.start_listening()
     except KeyboardInterrupt:
+        esp32_listener.server_socket.close()
         pass
     esp32_listener.destroy_node()
     rclpy.shutdown()
